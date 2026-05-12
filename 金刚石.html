@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>金刚石 球棍模型 · 棱边明显</title>
+    <style>
+        :root {
+            --bg: #f5e6c8;
+            --panel-bg: rgba(255,240,210,0.92);
+            --text: #3a3028;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            overflow: hidden;
+            height: 100vh; width: 100vw;
+            user-select: none; -webkit-user-select: none;
+        }
+        #container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        canvas { display: block; }
+
+        #info-panel {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10;
+            background: var(--panel-bg); backdrop-filter: blur(8px); border-radius: 30px;
+            padding: 10px 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            display: flex; align-items: center; gap: 16px; font-size: 15px; color: var(--text);
+            pointer-events: auto; border: 1px solid rgba(180,150,100,0.3);
+        }
+        #info-panel .title { font-weight: 700; font-size: 17px; color: #2a1f10; }
+
+        #atom-legend {
+            position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%); z-index: 10;
+            background: rgba(255,240,210,0.85); backdrop-filter: blur(6px); border-radius: 25px;
+            padding: 6px 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            display: flex; align-items: center; gap: 10px; pointer-events: none;
+            border: 1px solid rgba(180,150,100,0.25);
+        }
+        #atom-legend .dot {
+            width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+            background: #707070;
+            box-shadow: inset -2px -2px 3px rgba(0,0,0,0.2), inset 2px 2px 3px rgba(255,255,255,0.5);
+        }
+        #atom-legend .text {
+            font-size: 14px; font-weight: 600; color: #5a4a30;
+        }
+
+        #side-controls {
+            position: fixed; right: 20px; top: 45%; transform: translateY(-50%); z-index: 10;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        #side-controls button {
+            padding: 10px 16px; border: none; border-radius: 25px; cursor: pointer;
+            font-size: 13px; font-weight: 600; background: rgba(180,150,120,0.2);
+            color: #5a4a30; transition: all 0.25s; white-space: nowrap; font-family: inherit;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+        }
+        #side-controls button:hover { background: rgba(180,150,120,0.4); color: #2a1f10; }
+
+        #control-bar {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 10;
+            background: var(--panel-bg); backdrop-filter: blur(8px); border-radius: 40px;
+            padding: 12px 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+            display: flex; align-items: center; gap: 10px; pointer-events: auto;
+            border: 1px solid rgba(180,150,100,0.3);
+        }
+        #control-bar button {
+            padding: 10px 20px; border: none; border-radius: 25px; cursor: pointer;
+            font-size: 14px; font-weight: 600; background: rgba(180,150,120,0.2);
+            color: #5a4a30; transition: all 0.25s; white-space: nowrap; font-family: inherit;
+        }
+        #control-bar button:hover { background: rgba(180,150,120,0.4); color: #2a1f10; }
+        #control-bar button.active { background: #3a3028; color: #f5e6c8; }
+        #hint {
+            position: fixed; bottom: 75px; left: 50%; transform: translateX(-50%); z-index: 10;
+            font-size: 12px; color: rgba(100,80,50,0.5); pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+
+    <div id="info-panel">
+        <span class="title">💎 金刚石 · 球棍模型</span>
+    </div>
+
+    <div id="atom-legend">
+        <span class="dot"></span>
+        <span class="text">C 原子</span>
+    </div>
+
+    <div id="side-controls">
+        <button id="top-view-btn">俯视</button>
+        <button id="front-view-btn">正视</button>
+    </div>
+
+    <div id="control-bar">
+        <button id="auto-rotate-btn" class="active">⟳ 自动旋转</button>
+        <button id="reset-btn">重置</button>
+    </div>
+    <div id="hint">🖱 拖拽旋转 | 滚轮缩放 | 右键平移</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ---------- 场景 ----------
+        const container = document.getElementById('container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color('#f5e6c8');
+
+        const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.3, 30);
+        camera.position.set(2.4, 1.8, 3.2);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 0, 0);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.8;
+        controls.minDistance = 1.8;
+        controls.maxDistance = 8;
+        controls.maxPolarAngle = Math.PI * 0.8;
+        controls.update();
+
+        // 光照
+        scene.add(new THREE.AmbientLight('#ffffff', 2.5));
+        scene.add(new THREE.HemisphereLight('#ffffff', '#c8b898', 1.2));
+        const sun = new THREE.DirectionalLight('#ffffff', 3.5);
+        sun.position.set(5, 8, 5);
+        sun.castShadow = true;
+        sun.shadow.mapSize.width = 2048;
+        sun.shadow.mapSize.height = 2048;
+        sun.shadow.camera.near = 0.5;
+        sun.shadow.camera.far = 30;
+        sun.shadow.camera.left = -6;
+        sun.shadow.camera.right = 6;
+        sun.shadow.camera.top = 6;
+        sun.shadow.camera.bottom = -6;
+        sun.shadow.bias = -0.0001;
+        scene.add(sun);
+
+        // ---------- 晶体参数 ----------
+        const a = 1.8;
+        const offset = a * 0.25;
+        const bondLength = offset * Math.sqrt(3);
+
+        // 材质
+        const atomMat = new THREE.MeshStandardMaterial({ color: '#707070', roughness: 0.3, metalness: 0.25 });
+        // 共价键保持深蓝色
+        const bondMat = new THREE.MeshStandardMaterial({ color: '#1a5276', roughness: 0.4, metalness: 0.3 });
+
+        const atomRadius = 0.14;
+        const bondRadius = 0.055;
+        const edgeRadius = 0.045; // 晶胞棱边圆柱半径
+
+        // 晶胞顶点（居中）
+        const corners = [
+            [0,0,0],[a,0,0],[a,a,0],[0,a,0],
+            [0,0,a],[a,0,a],[a,a,a],[0,a,a]
+        ].map(p => new THREE.Vector3(p[0]-a/2, p[1]-a/2, p[2]-a/2));
+
+        // 棱边连线的索引
+        const edges = [
+            [0,1],[1,2],[2,3],[3,0], // 底面
+            [4,5],[5,6],[6,7],[7,4], // 顶面
+            [0,4],[1,5],[2,6],[3,7]  // 垂直棱
+        ];
+
+        // 用深色圆柱体绘制晶胞棱边，使其非常明显
+        const edgeMat = new THREE.MeshStandardMaterial({ color: '#4a3728', roughness: 0.6, metalness: 0.2 });
+        function addEdgeCylinder(p1, p2) {
+            const dir = new THREE.Vector3().subVectors(p2, p1);
+            const len = dir.length();
+            const mid = p1.clone().add(dir.clone().multiplyScalar(0.5));
+            const cyl = new THREE.Mesh(new THREE.CylinderGeometry(edgeRadius, edgeRadius, len, 8), edgeMat);
+            cyl.position.copy(mid);
+            const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+            cyl.setRotationFromQuaternion(quat);
+            cyl.castShadow = cyl.receiveShadow = true;
+            scene.add(cyl);
+        }
+        edges.forEach(([i,j]) => addEdgeCylinder(corners[i], corners[j]));
+
+        // 原子坐标
+        const atoms = [];
+        // 顶点
+        for (let x = 0; x <= 1; x++)
+            for (let y = 0; y <= 1; y++)
+                for (let z = 0; z <= 1; z++)
+                    atoms.push(new THREE.Vector3(x*a - a/2, y*a - a/2, z*a - a/2));
+        // 面心
+        const faceCenters = [
+            [0.5,0.5,0],[0.5,0,0.5],[0,0.5,0.5],
+            [0.5,0.5,1],[0.5,1,0.5],[1,0.5,0.5]
+        ].map(p => new THREE.Vector3(p[0]*a - a/2, p[1]*a - a/2, p[2]*a - a/2));
+        atoms.push(...faceCenters);
+        // 内部四个
+        const internals = [
+            [0.25,0.25,0.25],[0.75,0.75,0.25],
+            [0.75,0.25,0.75],[0.25,0.75,0.75]
+        ].map(p => new THREE.Vector3(p[0]*a - a/2, p[1]*a - a/2, p[2]*a - a/2));
+        atoms.push(...internals);
+
+        // 添加球体
+        atoms.forEach(pos => {
+            const mesh = new THREE.Mesh(new THREE.SphereGeometry(atomRadius, 36, 36), atomMat);
+            mesh.position.copy(pos);
+            mesh.castShadow = mesh.receiveShadow = true;
+            scene.add(mesh);
+        });
+
+        // 计算并绘制共价键（内部不变）
+        const tol = 0.1;
+        const bondedPairs = new Set();
+        for (let i = 0; i < atoms.length; i++) {
+            for (let j = i + 1; j < atoms.length; j++) {
+                const dist = atoms[i].distanceTo(atoms[j]);
+                if (Math.abs(dist - bondLength) < tol) {
+                    const key = `${i},${j}`;
+                    if (!bondedPairs.has(key)) {
+                        bondedPairs.add(key);
+                        const p1 = atoms[i], p2 = atoms[j];
+                        const dir = new THREE.Vector3().subVectors(p2, p1);
+                        const len = dir.length();
+                        const mid = p1.clone().add(dir.clone().multiplyScalar(0.5));
+                        const cyl = new THREE.Mesh(new THREE.CylinderGeometry(bondRadius, bondRadius, len, 8), bondMat);
+                        cyl.position.copy(mid);
+                        const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), dir.normalize());
+                        cyl.setRotationFromQuaternion(quat);
+                        cyl.castShadow = cyl.receiveShadow = true;
+                        scene.add(cyl);
+                    }
+                }
+            }
+        }
+
+        // ---------- 视角控制 ----------
+        const defaultPos = camera.position.clone();
+        const defaultTarget = controls.target.clone();
+
+        function animateCamera(pos, target) {
+            const startPos = camera.position.clone();
+            const startTarget = controls.target.clone();
+            const duration = 800;
+            const startTime = Date.now();
+            function step() {
+                const elapsed = Date.now() - startTime;
+                const t = Math.min(elapsed / duration, 1.0);
+                const ease = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+                camera.position.lerpVectors(startPos, pos, ease);
+                controls.target.lerpVectors(startTarget, target, ease);
+                controls.update();
+                if (t < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+
+        document.getElementById('top-view-btn').addEventListener('click', () => {
+            animateCamera(new THREE.Vector3(0, 4.0, 0.1), new THREE.Vector3(0,0,0));
+        });
+        document.getElementById('front-view-btn').addEventListener('click', () => {
+            animateCamera(new THREE.Vector3(0, 0, 4.0), new THREE.Vector3(0,0,0));
+        });
+
+        const autoBtn = document.getElementById('auto-rotate-btn');
+        autoBtn.addEventListener('click', () => {
+            controls.autoRotate = !controls.autoRotate;
+            autoBtn.classList.toggle('active', controls.autoRotate);
+            autoBtn.innerHTML = controls.autoRotate ? '⟳ 自动旋转' : '⟲ 暂停旋转';
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            animateCamera(defaultPos, defaultTarget);
+            controls.autoRotate = true;
+            autoBtn.classList.add('active');
+            autoBtn.innerHTML = '⟳ 自动旋转';
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
