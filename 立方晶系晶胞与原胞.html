@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>晶胞与原胞 (SC / BCC / FCC)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Microsoft YaHei', sans-serif;
+        }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 245, 220, 0.95);
+            backdrop-filter: blur(8px);
+            padding: 12px 24px;
+            border-radius: 30px;
+            color: #5a4a3a;
+            pointer-events: none;
+            z-index: 10;
+            font-weight: 500;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-left: 5px solid #ff8866;
+        }
+        #info h3 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+        #info p {
+            margin: 5px 0 0;
+            font-size: 0.85rem;
+        }
+        #controls-note {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.5);
+            color: #ddd;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            backdrop-filter: blur(4px);
+            pointer-events: none;
+            z-index: 10;
+        }
+        #control-bar {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            background: rgba(255, 240, 220, 0.9);
+            backdrop-filter: blur(8px);
+            padding: 12px 20px;
+            border-radius: 40px;
+            z-index: 20;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(180, 150, 100, 0.3);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            padding: 10px 22px;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            background: rgba(180, 150, 120, 0.2);
+            color: #5a4a30;
+            transition: all 0.25s;
+            font-family: inherit;
+        }
+        button:hover {
+            background: rgba(180, 150, 120, 0.4);
+            color: #2a1f10;
+        }
+        button.active {
+            background: #3a3028;
+            color: #f5e6c8;
+        }
+        #togglePrimBtn {
+            background: rgba(200, 150, 80, 0.25);
+        }
+        #togglePrimBtn.active {
+            background: #d4952b;
+            color: #fff;
+        }
+        #hint {
+            position: absolute;
+            bottom: 95px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(80, 60, 30, 0.5);
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h3 id="struct-name">🔴 简单立方 (SC)</h3>
+        <p id="struct-params">顶点原子 (红色) | 晶胞内原子数 = 1 | 配位数 = 6 | 致密度 = 0.524</p>
+    </div>
+    <div id="controls-note">🖱️ 鼠标拖拽旋转 | 右键平移 | 滚轮缩放 | 自动旋转</div>
+
+    <div id="control-bar">
+        <button id="btn-sc" class="active">SC</button>
+        <button id="btn-bcc">BCC</button>
+        <button id="btn-fcc">FCC</button>
+        <span style="width:2px; height:24px; background:rgba(180,150,100,0.4); border-radius:1px;"></span>
+        <button id="togglePrimBtn">📦 隐藏原胞</button>
+        <span style="width:2px; height:24px; background:rgba(180,150,100,0.4); border-radius:1px;"></span>
+        <button id="auto-rotate-btn" class="active">⟳ 自动旋转</button>
+        <button id="reset-btn">重置</button>
+    </div>
+    <div id="hint">🖱 拖拽旋转 | 滚轮缩放 | 右键平移 | 白色键连接同类原子</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xfdf5e6);
+        scene.fog = new THREE.FogExp2(0xfdf5e6, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(3.2, 2.5, 3.8);
+        camera.lookAt(0.5, 0.5, 0.5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.8;
+        controls.enableZoom = true;
+        controls.target.set(0.5, 0.5, 0.5);
+
+        scene.add(new THREE.AmbientLight(0x606060, 0.6));
+        const dirLight1 = new THREE.DirectionalLight(0xffeedd, 1.0);
+        dirLight1.position.set(2, 3, 2);
+        scene.add(dirLight1);
+        const dirLight2 = new THREE.DirectionalLight(0x88aaff, 0.5);
+        dirLight2.position.set(-2, 1, -2);
+        scene.add(dirLight2);
+        const backLight = new THREE.PointLight(0xffaa88, 0.3);
+        backLight.position.set(0, 1, -2);
+        scene.add(backLight);
+
+        const gridHelper = new THREE.GridHelper(5, 20, 0xccaa88, 0xeeddcc);
+        gridHelper.position.y = -1.2;
+        gridHelper.material.transparent = true;
+        gridHelper.material.opacity = 0.15;
+        scene.add(gridHelper);
+        const axesHelper = new THREE.AxesHelper(2.2);
+        axesHelper.material.transparent = true;
+        axesHelper.material.opacity = 0.25;
+        scene.add(axesHelper);
+
+        const vertices = [
+            new THREE.Vector3(-1, -1, -1),
+            new THREE.Vector3(1, -1, -1),
+            new THREE.Vector3(1, -1, 1),
+            new THREE.Vector3(-1, -1, 1),
+            new THREE.Vector3(-1, 1, -1),
+            new THREE.Vector3(1, 1, -1),
+            new THREE.Vector3(1, 1, 1),
+            new THREE.Vector3(-1, 1, 1)
+        ];
+        const edges = [
+            [0, 1],
+            [1, 2],
+            [2, 3],
+            [3, 0],
+            [4, 5],
+            [5, 6],
+            [6, 7],
+            [7, 4],
+            [0, 4],
+            [1, 5],
+            [2, 6],
+            [3, 7]
+        ];
+
+        const edgeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.1, roughness: 0.5 });
+
+        function addCylinderBetween(p1, p2, parentGroup = null) {
+            const start = p1.clone();
+            const end = p2.clone();
+            const dir = new THREE.Vector3().subVectors(end, start);
+            const length = dir.length();
+            const center = start.clone().add(dir.clone().multiplyScalar(0.5));
+            const cylinder = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.05, 0.05, length, 12),
+                edgeMat
+            );
+            cylinder.position.copy(center);
+            cylinder.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+            if (parentGroup) {
+                parentGroup.add(cylinder);
+            } else {
+                scene.add(cylinder);
+            }
+        }
+
+        const atomRadius = 0.12;
+
+        // ---------- SC 组 ----------
+        const scGroup = new THREE.Group();
+        const scVertexMat = new THREE.MeshStandardMaterial({ color: 0xff6666, roughness: 0.4, metalness: 0.2 });
+        vertices.forEach(v => {
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(atomRadius, 48, 48), scVertexMat);
+            sphere.position.copy(v);
+            scGroup.add(sphere);
+        });
+        // SC 晶胞白色边框（连接红色原子）
+        edges.forEach(e => addCylinderBetween(vertices[e[0]], vertices[e[1]], scGroup));
+
+        const scPrimitive = new THREE.Group();
+        const boxGeom = new THREE.BoxGeometry(2, 2, 2);
+        const boxMat = new THREE.MeshPhongMaterial({
+            color: 0xff9944,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.25,
+            emissive: 0x331100
+        });
+        const box = new THREE.Mesh(boxGeom, boxMat);
+        scPrimitive.add(box);
+        scGroup.add(scPrimitive);
+        scGroup.visible = true;
+        scene.add(scGroup);
+
+        // ---------- BCC 组 ----------
+        const bccGroup = new THREE.Group();
+        // 蓝色顶点原子
+        const bccVertexMat = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.4, metalness: 0.2 });
+        vertices.forEach(v => {
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(atomRadius, 48, 48), bccVertexMat);
+            sphere.position.copy(v);
+            bccGroup.add(sphere);
+        });
+        // BCC 晶胞白色边框（连接蓝色顶点原子）
+        edges.forEach(e => addCylinderBetween(vertices[e[0]], vertices[e[1]], bccGroup));
+
+        // 红色体心原子
+        const atomMatBody = new THREE.MeshStandardMaterial({ color: 0xff6666, roughness: 0.3, metalness: 0.3 });
+        const bodySphere1 = new THREE.Mesh(new THREE.SphereGeometry(atomRadius, 48, 48), atomMatBody);
+        bodySphere1.position.set(0, 0, 0);
+        bccGroup.add(bodySphere1);
+        const bodySphere2 = new THREE.Mesh(new THREE.SphereGeometry(atomRadius, 48, 48), atomMatBody);
+        bodySphere2.position.set(2, 0, 0);
+        bccGroup.add(bodySphere2);
+
+        // 顶角配位立方体（红色原子 + 白色边框）
+        const bccCornerEnv = new THREE.Group();
+        const envAtomMat = new THREE.MeshStandardMaterial({ color: 0xff6666, roughness: 0.3, metalness: 0.3 });
+        const centerVertex = new THREE.Vector3(1, 1, 1);
+        const neighborOffsets = [
+            [-1, -1, -1],
+            [1, -1, -1],
+            [-1, 1, -1],
+            [-1, -1, 1],
+            [1, 1, -1],
+            [1, -1, 1],
+            [-1, 1, 1],
+            [1, 1, 1]
+        ].map(arr => new THREE.Vector3(arr[0], arr[1], arr[2]));
+        const redPositions = neighborOffsets.map(offset => centerVertex.clone().add(offset));
+        redPositions.forEach(pos => {
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(atomRadius, 32, 32), envAtomMat);
+            sphere.position.copy(pos);
+            bccCornerEnv.add(sphere);
+        });
+        // 红色原子之间的白色边框（配位立方体棱）
+        for (let i = 0; i < redPositions.length; i++) {
+            for (let j = i + 1; j < redPositions.length; j++) {
+                const dist = redPositions[i].distanceTo(redPositions[j]);
+                if (Math.abs(dist - 2) < 0.01) {
+                    addCylinderBetween(redPositions[i], redPositions[j], bccCornerEnv);
+                }
+            }
+        }
+        bccGroup.add(bccCornerEnv);
+
+        // BCC 原胞
+        const bccPrimitive = new THREE.Group();
+        const a1 = new THREE.Vector3(-1, 1, 1);
+        const a2 = new THREE.Vector3(1, -1, 1);
+        const a3 = new THREE.Vector3(1, 1, -1);
+        const O = new THREE.Vector3(0, 0, 0);
+        const bccPrimPoints = [
+            O,
+            O.clone().add(a1),
+            O.clone().add(a2),
+            O.clone().add(a3),
+            O.clone().add(a1).add(a2),
+            O.clone().add(a1).add(a3),
+            O.clone().add(a2).add(a3),
+            O.clone().add(a1).add(a2).add(a3)
+        ];
+        const bccPrimGeom = new ConvexGeometry(bccPrimPoints);
+        const bccPrimMesh = new THREE.Mesh(bccPrimGeom, new THREE.MeshPhongMaterial({
+            color: 0xff8800,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.30,
+            emissive: 0x331100
+        }));
+        bccPrimitive.add(bccPrimMesh);
+        const bccPrimEdges = new THREE.EdgesGeometry(bccPrimGeom);
+        const bccPrimLine = new THREE.LineSegments(bccPrimEdges, new THREE.LineBasicMaterial({ color: 0xcc7700 }));
+        bccPrimitive.add(bccPrimLine);
+        bccGroup.add(bccPrimitive);
+        bccGroup.visible = false;
+        scene.add(bccGroup);
+
+        // ---------- FCC 组 ----------
+        const fccGroup = new THREE.Group();
+        // 红色顶点原子
+        const fccVertexMat = new THREE.MeshStandardMaterial({ color: 0xff6666, roughness: 0.4, metalness: 0.2 });
+        vertices.forEach(v => {
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(atomRadius, 48, 48), fccVertexMat);
+            sphere.position.copy(v);
+            fccGroup.add(sphere);
+        });
+        // FCC 晶胞白色边框（连接红色顶点）
+        edges.forEach(e => addCylinderBetween(vertices[e[0]], vertices[e[1]], fccGroup));
+
+        // 蓝色面心原子
+        const faceCenters = [
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(-1, 0, 0),
+            new THREE.Vector3(0, 1, 0),
+            new THREE.Vector3(0, -1, 0),
+            new THREE.Vector3(0, 0, 1),
+            new THREE.Vector3(0, 0, -1)
+        ];
+        const faceMat = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.4, metalness: 0.2 });
+        faceCenters.forEach(pos => {
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(atomRadius, 48, 48), faceMat);
+            sphere.position.copy(pos);
+            fccGroup.add(sphere);
+        });
+
+        // FCC 原胞
+        const fccPrimitive = new THREE.Group();
+        const O_fcc = new THREE.Vector3(-1, -1, -1);
+        const u = new THREE.Vector3(1, 1, 0);
+        const v = new THREE.Vector3(1, 0, 1);
+        const w = new THREE.Vector3(0, 1, 1);
+        const fccPrimPoints = [
+            O_fcc,
+            O_fcc.clone().add(u),
+            O_fcc.clone().add(v),
+            O_fcc.clone().add(w),
+            O_fcc.clone().add(u).add(v),
+            O_fcc.clone().add(u).add(w),
+            O_fcc.clone().add(v).add(w),
+            O_fcc.clone().add(u).add(v).add(w)
+        ];
+        const fccPrimGeom = new ConvexGeometry(fccPrimPoints);
+        const fccPrimMesh = new THREE.Mesh(fccPrimGeom, new THREE.MeshPhongMaterial({
+            color: 0x66ff66,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.32,
+            emissive: 0x226622
+        }));
+        fccPrimitive.add(fccPrimMesh);
+        fccGroup.add(fccPrimitive);
+        fccGroup.visible = false;
+        scene.add(fccGroup);
+
+        // 环境点缀
+        const originGlow = new THREE.PointLight(0xffaa66, 0.4, 2);
+        originGlow.position.set(0, 0, 0);
+        scene.add(originGlow);
+
+        const starGeo = new THREE.BufferGeometry();
+        const starCount = 600;
+        const starPos = new Float32Array(starCount * 3);
+        for (let i = 0; i < starCount; i++) {
+            starPos[i * 3] = (Math.random() - 0.5) * 200;
+            starPos[i * 3 + 1] = (Math.random() - 0.5) * 100;
+            starPos[i * 3 + 2] = (Math.random() - 0.5) * 80 - 40;
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
+            color: 0xccaa88,
+            size: 0.08,
+            transparent: true,
+            opacity: 0.25
+        }));
+        scene.add(stars);
+
+        // ---------- UI 逻辑 ----------
+        let currentStructure = 'sc';
+        const primitiveVisibility = { sc: true, bcc: true, fcc: true };
+        const structNameEl = document.getElementById('struct-name');
+        const structParamsEl = document.getElementById('struct-params');
+        const btnSC = document.getElementById('btn-sc');
+        const btnBCC = document.getElementById('btn-bcc');
+        const btnFCC = document.getElementById('btn-fcc');
+        const togglePrimBtn = document.getElementById('togglePrimBtn');
+        const autoBtn = document.getElementById('auto-rotate-btn');
+
+        function setActiveButton(btn) {
+            [btnSC, btnBCC, btnFCC].forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        function updateUIForStructure() {
+            scGroup.visible = (currentStructure === 'sc');
+            bccGroup.visible = (currentStructure === 'bcc');
+            fccGroup.visible = (currentStructure === 'fcc');
+
+            scPrimitive.visible = (currentStructure === 'sc') && primitiveVisibility.sc;
+            bccPrimitive.visible = (currentStructure === 'bcc') && primitiveVisibility.bcc;
+            fccPrimitive.visible = (currentStructure === 'fcc') && primitiveVisibility.fcc;
+            bodySphere2.visible = (currentStructure === 'bcc') && primitiveVisibility.bcc;
+
+            if (currentStructure === 'sc') {
+                structNameEl.innerHTML = '🔴 简单立方 (SC)';
+                structParamsEl.innerHTML = '顶点原子 (红色) | 晶胞内原子数 = 1 | 配位数 = 6 | 致密度 = 0.524';
+                structNameEl.style.color = '#c0392b';
+            } else if (currentStructure === 'bcc') {
+                structNameEl.innerHTML = '🔵 体心立方 (BCC)';
+                structParamsEl.innerHTML =
+                    '顶点(蓝) · 体心(红) · 配位立方体(红) | 原子数=2 | 配位数=8 | 致密度=0.680';
+                structNameEl.style.color = '#2980b9';
+            } else {
+                structNameEl.innerHTML = '🟢 面心立方 (FCC)';
+                structParamsEl.innerHTML = '顶点(红) · 面心(蓝) | 原子数=4 | 配位数=12 | 致密度=0.740';
+                structNameEl.style.color = '#2980b9';
+            }
+            const vis = primitiveVisibility[currentStructure];
+            togglePrimBtn.textContent = vis ? '📦 隐藏原胞' : '📦 显示原胞';
+            togglePrimBtn.classList.toggle('active', vis);
+        }
+
+        function switchToStructure(struct) {
+            currentStructure = struct;
+            if (struct === 'sc') setActiveButton(btnSC);
+            else if (struct === 'bcc') setActiveButton(btnBCC);
+            else setActiveButton(btnFCC);
+            updateUIForStructure();
+        }
+
+        btnSC.addEventListener('click', () => switchToStructure('sc'));
+        btnBCC.addEventListener('click', () => switchToStructure('bcc'));
+        btnFCC.addEventListener('click', () => switchToStructure('fcc'));
+
+        togglePrimBtn.addEventListener('click', () => {
+            primitiveVisibility[currentStructure] = !primitiveVisibility[currentStructure];
+            updateUIForStructure();
+        });
+
+        autoBtn.addEventListener('click', () => {
+            controls.autoRotate = !controls.autoRotate;
+            autoBtn.classList.toggle('active', controls.autoRotate);
+            autoBtn.innerHTML = controls.autoRotate ? '⟳ 自动旋转' : '⟲ 暂停旋转';
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            camera.position.set(3.2, 2.5, 3.8);
+            camera.lookAt(0.5, 0.5, 0.5);
+            controls.target.set(0.5, 0.5, 0.5);
+            controls.update();
+            controls.autoRotate = true;
+            autoBtn.classList.add('active');
+            autoBtn.innerHTML = '⟳ 自动旋转';
+            primitiveVisibility.sc = true;
+            primitiveVisibility.bcc = true;
+            primitiveVisibility.fcc = true;
+            updateUIForStructure();
+        });
+
+        updateUIForStructure();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
